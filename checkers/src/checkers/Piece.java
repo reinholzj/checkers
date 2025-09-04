@@ -1,5 +1,6 @@
 package checkers;
 
+import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Ellipse;
 
@@ -11,6 +12,7 @@ public class Piece {
         RED, BLACK
     }
     private final Type type;
+    private boolean isKing;
 
     /**
      * The position of the piece on the board, where (0,0) is the top left corner
@@ -19,12 +21,21 @@ public class Piece {
      */
     private int x, y;
     private final Ellipse ellipse;
+    private final Ellipse crown;
+    private final Pane pane;
 
     public Piece(Type type, int x, int y) {
         this.type = type;
         this.x = x;
         this.y = y;
+        pane = new Pane();
         ellipse = createEllipse();
+        crown = createEllipse();
+        crown.setVisible(false);
+        isKing = false;
+        pane.getChildren().addAll(ellipse,crown);
+        pane.setOnMouseClicked(mouseEvent -> trySetActive());
+        BoardController.addChild(pane);
         setActive(false);
         reposition();
         BoardController.getSquare(x,y).placePiece(this);
@@ -47,7 +58,6 @@ public class Piece {
         BoardController.addChild(ellipse);
         return ellipse;
     }
-
     public String toString() {
         return "Piece at "+x+", "+y;
     }
@@ -57,8 +67,14 @@ public class Piece {
     }
 
     private void reposition() {
-        ellipse.setLayoutX(x* BoardController.SQUARE_SIZE + BoardController.SQUARE_SIZE/2);
-        ellipse.setLayoutY(y* BoardController.SQUARE_SIZE + BoardController.SQUARE_SIZE/2);
+        pane.setLayoutX(x * BoardController.SQUARE_SIZE);
+        pane.setLayoutY(y * BoardController.SQUARE_SIZE);
+
+        ellipse.setLayoutX(BoardController.SQUARE_SIZE/2);
+        ellipse.setLayoutY(BoardController.SQUARE_SIZE/2);
+
+        crown.setLayoutX(BoardController.SQUARE_SIZE/2);
+        crown.setLayoutY(BoardController.SQUARE_SIZE/2-10);
     }
 
     private void trySetActive() {
@@ -68,8 +84,10 @@ public class Piece {
     public void setActive(boolean isActive) {
         if(isActive) {
             ellipse.setStrokeWidth(3);
+            crown.setStrokeWidth(3);
         } else {
             ellipse.setStrokeWidth(1);
+            crown.setStrokeWidth(1);
         }
     }
 
@@ -111,7 +129,14 @@ public class Piece {
         setActive(false);
 
         if(type.equals(Type.BLACK) && y == 0) {
-            BoardController.setMessage("Kings are not yet implemented. Sorry!");
+            BoardController.setMessage("Piece has become a king");
+            isKing = true; //Piece is set as King
+            crown.setVisible(true); //crown ellipse appears
+        }
+        if(type.equals(Type.RED) && y == 5){
+            BoardController.setMessage("Piece has become a king");
+            isKing = true; //Piece is set as King
+            crown.setVisible(true); //crown ellipse appears
         }
     }
 
@@ -150,7 +175,7 @@ public class Piece {
      */
     public void removeSelf() {
         BoardController.getSquare(x,y).removePiece();
-        BoardController.removeChild(ellipse);
+        BoardController.removeChild(pane);
     }
 
     /**
@@ -161,16 +186,28 @@ public class Piece {
      * @return true if this piece can move to that square 
      */
     public boolean isValidOrdinaryMove(Square square) {
-        if(type.equals(Type.BLACK)) {
-            return (square.getY() == y - 1 &&
-                    Math.abs(square.getX()-x) == 1);
-        } else if(type.equals(Type.RED)){
-            return (square.getY() == y + 1 &&
-                    Math.abs(square.getX()-x) == 1);
+        // Must move diagonally by 1 column
+        if (Math.abs(square.getX() - x) != 1) {
+            return false;
+        }
+
+        if (type.equals(Type.BLACK)) {
+            if (isKing) {
+                return Math.abs(square.getY() - y) == 1; // King moves up or down
+            } else {
+                return square.getY() == y - 1; // Regular BLACK moves up
+            }
+        } else if (type.equals(Type.RED)) {
+            if (isKing) {
+                return Math.abs(square.getY() - y) == 1; // King moves up or down
+            } else {
+                return square.getY() == y + 1; // Regular RED moves down
+            }
         } else {
-            throw new IllegalStateException("This piece has an unknown type:"+type);
+            throw new IllegalStateException("This piece has an unknown type: " + type);
         }
     }
+
 
     /**
      * Check if the current piece can capture another piece when moving
@@ -195,23 +232,26 @@ public class Piece {
      *      Otherwise, return the piece that would be removed by moving to that square.
      */
     public Piece getCapturedPiece(Square square) {
-        if(type.equals(Type.BLACK)) {
-            if (!((square.getY() == y - 2 &&
-                    Math.abs(square.getX()-x) == 2))) {
-                return null;
-            } else {
-                return getMiddlePiece(square);
-            }
-        } else if(type.equals(Type.RED)){
-            if (!((square.getY() == y + 2 &&
-                    Math.abs(square.getX()-x) == 2))) {
-                return null;
-            } else {
-                return getMiddlePiece(square);
-            }
-        } else {
-            throw new IllegalStateException("This piece has an unknown type:"+type);
+        int dx = square.getX() - x;
+        int dy = square.getY() - y;
+
+        // Must move exactly 2 squares diagonally
+        if (Math.abs(dx) != 2 || Math.abs(dy) != 2) {
+            return null;
         }
+
+        // For non-kings, check direction
+        if (!isKing) {
+            if (type.equals(Type.BLACK) && dy != -2) {
+                return null; // BLACK must capture upward
+            }
+            if (type.equals(Type.RED) && dy != 2) {
+                return null; // RED must capture downward
+            }
+        }
+
+        // Get and return the piece in the middle
+        return getMiddlePiece(square);
     }
 
     /**
